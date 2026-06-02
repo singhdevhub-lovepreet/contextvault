@@ -23,11 +23,7 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
 @pytest.mark.parametrize(
     "argv",
     [
-        ["serve", "--mcp"],
-        ["lint"],
         ["hot"],
-        ["workspaces", "ls"],
-        ["adapter", "add", "claude-code"],
         ["ingest", "/tmp/x.md"],
         ["save", "--title", "T", "--type", "session"],
     ],

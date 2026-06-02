@@ -120,15 +120,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command == "init":
-        return _run_init(args)
-    if args.command == "recall":
-        return _run_recall(args)
-    if args.command == "capture":
-        return _run_capture(args)
+    dispatch = {
+        "init": _run_init,
+        "recall": _run_recall,
+        "capture": _run_capture,
+        "serve": _run_serve,
+        "adapter": _run_adapter,
+        "lint": _run_lint,
+        "workspaces": _run_workspaces,
+    }
+    handler = dispatch.get(args.command)
+    if handler is not None:
+        return handler(args)
 
-    # Phases 2-6 will fill these in. Until then, return 64 (EX_USAGE) with
-    # a clear message rather than silently no-op.
+    # Remaining stubs (hot, ingest, save) land in later phases.
     sys.stderr.write(
         f"contextvault: '{args.command}' is not implemented yet.\n"
         f"Track progress: https://github.com/contextvault/contextvault\n"
@@ -221,6 +226,139 @@ def _run_recall(args: argparse.Namespace) -> int:
     sys.stdout.write("\n")
     return 0
 
+
+def _run_serve(args: argparse.Namespace) -> int:
+    from contextvault import config
+    from contextvault.server import auth as server_auth
+    from contextvault.server.http import LoopbackHTTPServer
+    from contextvault.server.mcp import MCPServer
+
+    vault_path = config.resolve_vault_path(None)
+    if not vault_path.is_dir():
+        sys.stderr.write(
+            f"contextvault serve: vault not found at {vault_path}\n"
+            f"  Run `contextvault init` first.\n"
+        )
+        return 3
+
+    # If no transport flag specified, default to --both.
+    run_mcp = bool(args.mcp or args.both or (not args.mcp and not args.http))
+    run_http = bool(args.http or args.both)
+
+    http_server: LoopbackHTTPServer | None = None
+    if run_http:
+        token = server_auth.load_expected_token()
+        if not token:
+            sys.stderr.write(
+                "contextvault serve: no token at ~/.config/contextvault/token\n"
+                "  Run `contextvault init` to generate one.\n"
+            )
+            return 3
+        http_server = LoopbackHTTPServer(
+            vault_path=vault_path, expected_token=token, port=args.port
+        )
+        http_server.start()
+        sys.stderr.write(
+            f"contextvault: HTTP serving on http://127.0.0.1:{http_server.address[1]}\n"
+        )
+
+    try:
+        if run_mcp:
+            MCPServer(vault_path).run()
+        elif run_http:
+            # HTTP-only: block until killed
+            import signal
+            stop = threading.Event()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                signal.signal(sig, lambda *_: stop.set())
+            stop.wait()
+    finally:
+        if http_server is not None:
+            http_server.stop()
+    return 0
+
+
+def _run_adapter(args: argparse.Namespace) -> int:
+    from contextvault import adapters
+
+    if args.adapter_cmd == "add":
+        try:
+            if args.client == "claude-code":
+                lines = adapters.install_claude_code()
+            elif args.client == "cursor":
+                lines = adapters.install_cursor()
+            else:
+                sys.stderr.write(f"contextvault adapter add: unknown client {args.client!r}\n")
+                return 2
+        except RuntimeError as exc:
+            sys.stderr.write(f"contextvault adapter add: {exc}\n")
+            return 3
+        for line in lines:
+            sys.stdout.write(line + "\n")
+        return 0
+
+    if args.adapter_cmd == "remove":
+        if args.client == "claude-code":
+            lines = adapters.remove_claude_code()
+        elif args.client == "cursor":
+            lines = ["Cursor MCP entries are user-managed in ~/.cursor/mcp.json — remove manually."]
+        else:
+            sys.stderr.write(f"contextvault adapter remove: unknown client {args.client!r}\n")
+            return 2
+        for line in lines:
+            sys.stdout.write(line + "\n")
+        return 0
+
+    sys.stderr.write("contextvault adapter: unknown subcommand\n")
+    return 2
+
+
+def _run_lint(args: argparse.Namespace) -> int:
+    import json as _json
+    import os
+
+    from contextvault import config
+    from contextvault.server import tools
+
+    vault_path = config.resolve_vault_path(None)
+    if not vault_path.is_dir():
+        sys.stderr.write(f"contextvault lint: vault not found at {vault_path}\n")
+        return 3
+
+    cwd = args.cwd or os.environ.get("PWD") or os.getcwd()
+    try:
+        findings = tools.lint(vault_path, cwd=cwd, scope=args.scope)
+    except tools.ToolError as exc:
+        sys.stderr.write(f"contextvault lint: {exc}\n")
+        return 2
+
+    _json.dump(findings, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 1 if findings else 0
+
+
+def _run_workspaces(args: argparse.Namespace) -> int:
+    import json as _json
+
+    from contextvault import config
+    from contextvault.server import tools
+
+    if args.workspaces_cmd == "ls":
+        vault_path = config.resolve_vault_path(None)
+        if not vault_path.is_dir():
+            sys.stderr.write(f"contextvault workspaces: vault not found at {vault_path}\n")
+            return 3
+        entries = tools.list_workspaces(vault_path)
+        _json.dump(entries, sys.stdout, indent=2, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return 0
+
+    sys.stderr.write("contextvault workspaces: unknown subcommand\n")
+    return 2
+
+
+# A late stdlib import so the help-only path stays light.
+import threading  # noqa: E402  — top-of-file would slow `--help` slightly
 
 if __name__ == "__main__":
     raise SystemExit(main())
