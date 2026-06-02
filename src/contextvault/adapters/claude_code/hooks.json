@@ -1,5 +1,5 @@
 {
-  "_comment": "ContextVault hooks for Claude Code. Installed by `contextvault adapter add claude-code` which merges these entries into ~/.claude/settings.json (never overwriting existing hooks).",
+  "_comment": "ContextVault hooks for Claude Code. Installed by `contextvault adapter add claude-code`, which merges these entries into ~/.claude/settings.json (preserving user-added hooks and replacing any prior contextvault entries).",
   "hooks": {
     "SessionStart": [
       {
@@ -7,18 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "contextvault hot --workspace \"$(contextvault workspaces ls --encode \"$PWD\" 2>/dev/null)\" 2>/dev/null || true"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "^/clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "contextvault capture --cwd \"$PWD\" --mode final 2>/dev/null || true"
+            "command": "contextvault hot 2>/dev/null || true"
           }
         ]
       }
@@ -29,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "contextvault capture --cwd \"$PWD\" --mode incremental 2>/dev/null &"
+            "command": "contextvault capture --cwd \"${CLAUDE_PROJECT_DIR:-$PWD}\" --mode incremental >/dev/null 2>&1 &"
           }
         ]
       }

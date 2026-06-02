@@ -29,6 +29,8 @@ contextvault serve --both &             # MCP (stdio) + HTTP (127.0.0.1:7842)
 
 See `docs/quickstart.md` for the full setup walkthrough.
 
+> **Picking this up after a gap?** Start at [`docs/STATE.md`](docs/STATE.md) — current phase status, known bugs, v0.2 backlog, and how to rebuild context fast.
+
 ## Architecture
 
 ```
