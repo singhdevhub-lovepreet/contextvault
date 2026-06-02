@@ -1,0 +1,24 @@
+/* ContextVault Obsidian companion styles. */
+
+.cv-status-bar {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.cv-workspaces {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5em;
+}
+
+.cv-workspaces th,
+.cv-workspaces td {
+  padding: 0.35em 0.75em;
+  text-align: left;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.cv-workspaces thead th {
+  font-weight: 600;
+  border-bottom: 2px solid var(--background-modifier-border);
+}

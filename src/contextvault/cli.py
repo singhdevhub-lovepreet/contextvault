@@ -128,16 +128,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         "adapter": _run_adapter,
         "lint": _run_lint,
         "workspaces": _run_workspaces,
+        "hot": _run_hot,
+        "ingest": _run_ingest,
+        "save": _run_save,
     }
     handler = dispatch.get(args.command)
     if handler is not None:
         return handler(args)
 
-    # Remaining stubs (hot, ingest, save) land in later phases.
-    sys.stderr.write(
-        f"contextvault: '{args.command}' is not implemented yet.\n"
-        f"Track progress: https://github.com/contextvault/contextvault\n"
-    )
+    sys.stderr.write(f"contextvault: unknown command '{args.command}'\n")
     return 64
 
 
@@ -355,6 +354,133 @@ def _run_workspaces(args: argparse.Namespace) -> int:
 
     sys.stderr.write("contextvault workspaces: unknown subcommand\n")
     return 2
+
+
+def _run_hot(args: argparse.Namespace) -> int:
+    import os
+
+    from contextvault import config, workspace
+    from contextvault.vault import Vault
+
+    vault_path = config.resolve_vault_path(None)
+    if not vault_path.is_dir():
+        sys.stderr.write(f"contextvault hot: vault not found at {vault_path}\n")
+        return 3
+
+    if args.workspace:
+        ws_id = args.workspace
+        if not workspace.is_valid_id(ws_id):
+            sys.stderr.write(f"contextvault hot: invalid workspace id {ws_id!r}\n")
+            return 2
+    else:
+        cwd = os.environ.get("PWD") or os.getcwd()
+        try:
+            ws_id = workspace.encode(cwd)
+        except workspace.WorkspaceError as exc:
+            sys.stderr.write(f"contextvault hot: {exc}\n")
+            return 2
+
+    vault = Vault(vault_path)
+    content = vault.read(f"workspaces/{ws_id}/hot.md")
+    if content is None:
+        content = vault.read("hot.md") or ""
+    sys.stdout.write(content)
+    if not content.endswith("\n"):
+        sys.stdout.write("\n")
+    return 0
+
+
+def _run_ingest(args: argparse.Namespace) -> int:
+    import os
+    from urllib.parse import urlparse
+
+    from contextvault import config, workspace
+    from contextvault.server import tools
+
+    vault_path = config.resolve_vault_path(None)
+    if not vault_path.is_dir():
+        sys.stderr.write(f"contextvault ingest: vault not found at {vault_path}\n")
+        return 3
+
+    source = args.source
+    parsed = urlparse(source)
+    if parsed.scheme in ("http", "https"):
+        sys.stderr.write(
+            "contextvault ingest: URL ingestion is not yet supported "
+            "(needs WebFetch + defuddle, planned for v0.2).\n"
+        )
+        return 64
+
+    path = os.path.abspath(os.path.expanduser(source))
+    if not os.path.isfile(path):
+        sys.stderr.write(f"contextvault ingest: file not found: {source}\n")
+        return 3
+
+    with open(path, encoding="utf-8") as fh:
+        body = fh.read()
+
+    title = os.path.splitext(os.path.basename(path))[0]
+    cwd = os.environ.get("PWD") or os.getcwd()
+    if args.workspace:
+        ws_arg = args.workspace
+    else:
+        try:
+            workspace.encode(cwd)
+            ws_arg = "current"
+        except workspace.WorkspaceError:
+            ws_arg = "global"
+
+    try:
+        result = tools.save_note(
+            vault_path,
+            body,
+            title=title,
+            note_type="source",
+            cwd=cwd,
+            workspace=ws_arg,
+        )
+    except tools.ToolError as exc:
+        sys.stderr.write(f"contextvault ingest: {exc}\n")
+        return 2
+
+    sys.stdout.write(f"ingested → {result['path']}\n")
+    return 0
+
+
+def _run_save(args: argparse.Namespace) -> int:
+    import os
+
+    from contextvault import config
+    from contextvault.server import tools
+
+    vault_path = config.resolve_vault_path(None)
+    if not vault_path.is_dir():
+        sys.stderr.write(f"contextvault save: vault not found at {vault_path}\n")
+        return 3
+
+    body = sys.stdin.read()
+    if not body.strip():
+        sys.stderr.write("contextvault save: stdin is empty\n")
+        return 2
+
+    cwd = os.environ.get("PWD") or os.getcwd()
+    ws_arg = args.workspace or "current"
+    try:
+        result = tools.save_note(
+            vault_path,
+            body,
+            title=args.title,
+            note_type=args.note_type,
+            tags=args.tags or [],
+            cwd=cwd,
+            workspace=ws_arg,
+        )
+    except tools.ToolError as exc:
+        sys.stderr.write(f"contextvault save: {exc}\n")
+        return 2
+
+    sys.stdout.write(f"saved → {result['path']}\n")
+    return 0
 
 
 # A late stdlib import so the help-only path stays light.

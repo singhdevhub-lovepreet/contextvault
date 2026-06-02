@@ -70,4 +70,5 @@ class TestRun:
     def test_combines_checks(self, vault: Vault) -> None:
         findings = run(vault)
         cats = {f.category for f in findings}
-        assert cats == {"dead_link", "orphan"}
+        # Phase 4 added 6 more checks; the original two must still appear.
+        assert {"dead_link", "orphan"}.issubset(cats)

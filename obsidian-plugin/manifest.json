@@ -1,0 +1,10 @@
+{
+  "id": "contextvault",
+  "name": "ContextVault",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Per-workspace LLM session memory. Pairs with the ContextVault CLI to surface workspace hot caches, recent sessions, and uncaptured session counts inside Obsidian.",
+  "author": "ContextVault contributors",
+  "authorUrl": "https://github.com/contextvault/contextvault",
+  "isDesktopOnly": true
+}

@@ -1,0 +1,17 @@
+{
+  "name": "contextvault-obsidian",
+  "version": "0.1.0",
+  "description": "Obsidian companion plugin for ContextVault.",
+  "main": "main.js",
+  "scripts": {
+    "build": "esbuild main.ts --bundle --external:obsidian --format=cjs --target=es2020 --outfile=main.js",
+    "dev": "esbuild main.ts --bundle --external:obsidian --format=cjs --target=es2020 --outfile=main.js --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0",
+    "obsidian": "^1.4.0",
+    "typescript": "^5.4.0"
+  },
+  "keywords": ["obsidian", "plugin", "contextvault", "llm"],
+  "license": "MIT"
+}

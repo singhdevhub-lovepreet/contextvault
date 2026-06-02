@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from contextvault import workspace as workspace_mod
+from contextvault.graph import neighborhood as graph_neighborhood_mod
 from contextvault.lint import checks as lint_checks
 from contextvault.retrieve.query import run_recall
 from contextvault.vault import Vault, VaultError
@@ -267,9 +268,6 @@ def list_workspaces(vault_path: Path) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------
 
 
-_WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:\|[^\]]+)?(?:#[^\]]+)?\]\]")
-
-
 def graph_neighborhood(
     vault_path: Path, note_path: str, *, depth: int = 1
 ) -> dict[str, Any]:
@@ -286,65 +284,12 @@ def graph_neighborhood(
     if not vault.exists(note_path):
         raise ToolError(f"note not found: {note_path}", status=404)
 
-    nodes: set[str] = {note_path}
-    edges: list[tuple[str, str]] = []
-    frontier: list[str] = [note_path]
-
-    for _ in range(depth):
-        next_frontier: list[str] = []
-        for current in frontier:
-            text = vault.read(current) or ""
-            for link in _extract_wikilinks(text):
-                resolved = _resolve_wikilink(vault, current, link)
-                if resolved is None:
-                    continue
-                edges.append((current, resolved))
-                if resolved not in nodes:
-                    nodes.add(resolved)
-                    next_frontier.append(resolved)
-        frontier = next_frontier
-        if not frontier:
-            break
-
+    n = graph_neighborhood_mod.expand(vault, note_path, depth=depth)
     return {
-        "root": note_path,
-        "nodes": sorted(nodes),
-        "edges": sorted({tuple(e) for e in edges}),
+        "root": n.root,
+        "nodes": list(n.nodes),
+        "edges": [list(e) for e in n.edges],
     }
-
-
-def _extract_wikilinks(text: str) -> list[str]:
-    return [m.group(1).strip() for m in _WIKILINK_RE.finditer(text)]
-
-
-def _resolve_wikilink(vault: Vault, source_rel: str, target: str) -> str | None:
-    """Resolve a ``[[Target]]`` wikilink to a vault-relative path if it exists.
-
-    Resolution order: (a) ``<target>.md`` next to source, (b) any ``.md``
-    anywhere in the vault matching ``<target>.md``. The bare-name lookup
-    is the Obsidian default.
-    """
-    target_filename = f"{target}.md"
-
-    # 1. Sibling of source
-    source_path = vault.root / source_rel
-    sibling = source_path.parent / target_filename
-    if sibling.is_file():
-        try:
-            return sibling.relative_to(vault.root).as_posix()
-        except ValueError:
-            pass
-
-    # 2. Anywhere in vault — first hit wins (Obsidian itself disambiguates
-    # via subpath qualifiers like ``[[folder/Target]]``; we don't yet).
-    for match in vault.root.rglob(target_filename):
-        if ".vault-meta" in match.parts:
-            continue
-        try:
-            return match.relative_to(vault.root).as_posix()
-        except ValueError:
-            continue
-    return None
 
 
 # --------------------------------------------------------------------------

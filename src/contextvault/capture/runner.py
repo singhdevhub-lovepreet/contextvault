@@ -119,6 +119,7 @@ def run_capture(
         if redactions:
             _append_redacted_log(vault, meta.session_id, redactions)
         _save_checkpoint(vault, checkpoint, meta.session_id, meta.last_uuid)
+        _regenerate_canvas(vault, workspace)
 
     return CaptureResult(
         workspace=workspace,
@@ -301,6 +302,21 @@ def _render_workspace_hot(
             lines.append(f"- {t}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _regenerate_canvas(vault: Vault, workspace: str) -> None:
+    """Refresh the workspace's Obsidian canvas map.
+
+    Best-effort: a canvas-write failure must not abort an otherwise-good
+    capture (the session note + hot cache + log + checkpoint are
+    load-bearing; the canvas is decoration).
+    """
+    try:
+        from contextvault.graph.canvas import regenerate_workspace_canvas
+
+        regenerate_workspace_canvas(vault, workspace)
+    except Exception:
+        pass
 
 
 def _append_redacted_log(
