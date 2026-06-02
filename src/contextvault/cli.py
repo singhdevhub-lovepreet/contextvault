@@ -120,13 +120,62 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    # Phase 0 scaffold: every subcommand is unimplemented and exits 64
-    # (EX_USAGE) with a clear message. Phases 1-6 fill these in.
+    if args.command == "init":
+        return _run_init(args)
+    if args.command == "recall":
+        return _run_recall(args)
+
+    # Phases 2-6 will fill these in. Until then, return 64 (EX_USAGE) with
+    # a clear message rather than silently no-op.
     sys.stderr.write(
-        f"contextvault: '{args.command}' is not implemented yet (phase 0 scaffold).\n"
+        f"contextvault: '{args.command}' is not implemented yet.\n"
         f"Track progress: https://github.com/contextvault/contextvault\n"
     )
     return 64
+
+
+def _run_init(args: argparse.Namespace) -> int:
+    from contextvault import config
+
+    vault_path = config.resolve_vault_path(args.vault)
+    config.bootstrap_vault(vault_path)
+    cfg_path = config.write_default_config(vault_path)
+    token = config.generate_token()
+    sys.stdout.write(
+        f"vault:  {vault_path}\n"
+        f"config: {cfg_path}\n"
+        f"token:  {token}  (chmod 600, used by HTTP server only)\n"
+    )
+    return 0
+
+
+def _run_recall(args: argparse.Namespace) -> int:
+    import json
+    import os
+
+    from contextvault import config, workspace
+    from contextvault.retrieve.query import run_recall
+    from contextvault.vault import VaultError
+
+    vault_path = config.resolve_vault_path(None)
+    cwd = args.cwd or os.environ.get("PWD") or os.getcwd()
+    scope: str | None = None
+    if args.scope == "workspace":
+        try:
+            scope = workspace.encode(cwd)
+        except workspace.WorkspaceError as exc:
+            sys.stderr.write(f"contextvault recall: {exc}\n")
+            return 2
+
+    try:
+        hits = run_recall(vault_path, args.query, scope=scope, top_k=args.k)
+    except VaultError as exc:
+        sys.stderr.write(f"contextvault recall: {exc}\n")
+        return 3
+
+    json.dump(hits, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
 
 
 if __name__ == "__main__":

@@ -148,15 +148,17 @@ class Vault:
 
     def list_files(
         self,
-        rel_dir: str | os.PathLike[str],
+        rel_dir: str | os.PathLike[str] = "",
         pattern: str = "*.md",
     ) -> list[Path]:
         """Return absolute paths matching ``pattern`` under ``rel_dir``.
 
-        Returns an empty list if the directory does not exist. Sorted for
-        deterministic iteration.
+        Passing ``""`` or ``"."`` means the vault root. Returns an empty
+        list if the directory does not exist. Sorted for deterministic
+        iteration.
         """
-        base = self._safe_join(rel_dir)
+        rel_str = os.fspath(rel_dir) if rel_dir else ""
+        base = self.root if rel_str in ("", ".") else self._safe_join(rel_dir)
         if not base.is_dir():
             return []
         return sorted(base.rglob(pattern))

@@ -23,10 +23,8 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
 @pytest.mark.parametrize(
     "argv",
     [
-        ["init"],
         ["serve", "--mcp"],
         ["capture", "--cwd", "/tmp"],
-        ["recall", "anything"],
         ["lint"],
         ["hot"],
         ["workspaces", "ls"],
@@ -35,11 +33,8 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
         ["save", "--title", "T", "--type", "session"],
     ],
 )
-def test_subcommand_returns_64(argv: list[str]) -> None:
-    """Phase 0: every subcommand is unimplemented and returns 64 (EX_USAGE).
-
-    Each phase will flip these to real assertions as features land.
-    """
+def test_stubbed_subcommand_returns_64(argv: list[str]) -> None:
+    """Stub subcommands return 64 (EX_USAGE) until their phase lands."""
     assert main(argv) == 64
 
 
