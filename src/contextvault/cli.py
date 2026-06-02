@@ -124,6 +124,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_init(args)
     if args.command == "recall":
         return _run_recall(args)
+    if args.command == "capture":
+        return _run_capture(args)
 
     # Phases 2-6 will fill these in. Until then, return 64 (EX_USAGE) with
     # a clear message rather than silently no-op.
@@ -145,6 +147,48 @@ def _run_init(args: argparse.Namespace) -> int:
         f"vault:  {vault_path}\n"
         f"config: {cfg_path}\n"
         f"token:  {token}  (chmod 600, used by HTTP server only)\n"
+    )
+    return 0
+
+
+def _run_capture(args: argparse.Namespace) -> int:
+    from contextvault import config
+    from contextvault.capture.runner import run_capture
+    from contextvault.vault import VaultError
+    from contextvault.workspace import WorkspaceError
+
+    vault_path = config.resolve_vault_path(None)
+    if not vault_path.is_dir():
+        sys.stderr.write(
+            f"contextvault capture: vault does not exist: {vault_path!s}\n"
+            f"  Run `contextvault init` first.\n"
+        )
+        return 3
+
+    try:
+        result = run_capture(vault_path, args.cwd)
+    except WorkspaceError as exc:
+        sys.stderr.write(f"contextvault capture: {exc}\n")
+        return 2
+    except VaultError as exc:
+        sys.stderr.write(f"contextvault capture: {exc}\n")
+        return 3
+
+    if result is None:
+        sys.stdout.write("no transcript found for workspace\n")
+        return 0
+
+    if not result.wrote_note:
+        sys.stdout.write(
+            f"workspace={result.workspace} session={result.session_id[:8]} "
+            f"new_entries={result.new_entries} (no signal extracted; nothing written)\n"
+        )
+        return 0
+
+    sys.stdout.write(
+        f"workspace={result.workspace} session={result.session_id[:8]} "
+        f"new_entries={result.new_entries} redactions={result.redactions} "
+        f"note={result.session_note_path}\n"
     )
     return 0
 

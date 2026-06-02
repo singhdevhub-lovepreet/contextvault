@@ -24,7 +24,6 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
     "argv",
     [
         ["serve", "--mcp"],
-        ["capture", "--cwd", "/tmp"],
         ["lint"],
         ["hot"],
         ["workspaces", "ls"],
