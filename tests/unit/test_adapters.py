@@ -15,9 +15,11 @@ class TestInstallClaudeCode:
         assert settings.is_file()
         data = json.loads(settings.read_text())
         assert "hooks" in data
-        # All three lifecycle hooks present
+        # SessionStart + Stop are present. UserPromptSubmit was removed in
+        # v0.1.0 — its matcher fired on every prompt and the Stop hook
+        # already covers the pre-/clear capture window.
         events = set(data["hooks"].keys())
-        assert {"SessionStart", "UserPromptSubmit", "Stop"}.issubset(events)
+        assert {"SessionStart", "Stop"}.issubset(events)
         # MCP server registered
         assert data["mcpServers"]["contextvault"]["command"] == "contextvault"
         assert any("Stop hook" in line for line in out)
@@ -59,7 +61,7 @@ class TestInstallClaudeCode:
         adapters.install_claude_code(settings_path=settings)
         adapters.install_claude_code(settings_path=settings)
         data = json.loads(settings.read_text())
-        for event in ("Stop", "UserPromptSubmit", "SessionStart"):
+        for event in ("Stop", "SessionStart"):
             cv_count = sum(
                 1
                 for entry in data["hooks"].get(event, [])
