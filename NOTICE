@@ -1,0 +1,25 @@
+ContextVault
+============
+
+Portions of this software are derived from `claude-obsidian`
+(https://github.com/AgriciDaniel/claude-obsidian), copyright (c) 2026
+AgriciDaniel (AI Marketing Hub), licensed under the MIT License.
+
+Specifically, the following modules are adapted from the upstream project
+and carry an `Adapted from claude-obsidian/...` header in their docstrings:
+
+  src/contextvault/retrieve/bm25.py        (from scripts/bm25-index.py)
+  src/contextvault/retrieve/rerank.py      (from scripts/rerank.py)
+  src/contextvault/retrieve/query.py       (from scripts/retrieve.py)
+  src/contextvault/ingest/contextual_prefix.py
+                                           (from scripts/contextual-prefix.py)
+  src/contextvault/ingest/extract.py       (from skills/wiki-ingest/SKILL.md)
+  src/contextvault/lint/checks.py          (from skills/wiki-lint/SKILL.md)
+  src/contextvault/graph/canvas.py         (from skills/canvas/SKILL.md)
+  src/contextvault/vault.py (lock helpers) (from scripts/wiki-lock.sh)
+  src/contextvault/workspace.py (path safety)
+                                           (from scripts/wiki-mode.py)
+
+The original MIT license text is reproduced in `LICENSE`. No source files
+from the upstream project are redistributed verbatim; all adapted code has
+been substantially rewritten for the ContextVault architecture.

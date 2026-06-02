@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# ContextVault local state (must never be committed)
+*.token
+config.toml.local
+.vault-meta/
+vault/
+
+# Obsidian plugin build output
+obsidian-plugin/main.js
+obsidian-plugin/node_modules/
+obsidian-plugin/*.tgz
+
+# Test artifacts
+tests/tmp/
