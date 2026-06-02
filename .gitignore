@@ -27,6 +27,17 @@ config.toml.local
 .vault-meta/
 vault/
 
+# Obsidian / vault directories that appear if VAULT_PATH points at the repo
+# (e.g. someone runs `contextvault init` here by mistake). The real vault
+# lives in ~/Documents/ContextVault — these should never enter version control.
+.obsidian/
+workspaces/
+entities/
+concepts/
+hot.md
+index.md
+log.md
+
 # Obsidian plugin build output
 obsidian-plugin/main.js
 obsidian-plugin/node_modules/
