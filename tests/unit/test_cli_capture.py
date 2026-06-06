@@ -81,6 +81,18 @@ def test_capture_invalid_cwd_returns_2(
     assert rc == 2
 
 
+def test_capture_with_session_id(
+    isolated_env: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _vault, _ = isolated_env
+    capsys.readouterr()
+    rc = main(["capture", "--cwd", FIXTURE_CWD, "--session-id", FIXTURE_SID])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "workspace=" in out
+    assert "abcd1234" in out
+
+
 def test_capture_idempotent_second_run(
     isolated_env: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:

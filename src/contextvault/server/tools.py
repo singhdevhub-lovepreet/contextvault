@@ -219,6 +219,16 @@ def save_note(
     with vault.lock(rel):
         vault.write(rel, full)
 
+    # Best-effort canvas refresh for workspace-scoped notes (same pattern
+    # as capture/runner.py:313-325 — a canvas failure must not break saves).
+    if ws_frontmatter is not None:
+        try:
+            from contextvault.graph.canvas import regenerate_workspace_canvas
+
+            regenerate_workspace_canvas(vault, ws_frontmatter)
+        except Exception:
+            pass
+
     return {"path": rel, "workspace": ws_frontmatter, "bytes": len(full)}
 
 

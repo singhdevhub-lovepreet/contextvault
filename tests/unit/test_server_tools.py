@@ -149,6 +149,28 @@ class TestSaveNote:
         with pytest.raises(tools.ToolError, match="empty"):
             tools.save_note(vault_path, "", title="t", workspace="global")
 
+    def test_workspace_save_creates_canvas(self, vault_path: Path) -> None:
+        tools.save_note(
+            vault_path,
+            "workspace-scoped body",
+            title="CanvasTest",
+            cwd="/Users/alice/foo",
+            workspace="current",
+        )
+        canvas = vault_path / "workspaces" / "-Users-alice-foo" / "Workspace Map.canvas"
+        assert canvas.is_file()
+
+    def test_global_save_does_not_create_canvas(self, vault_path: Path) -> None:
+        tools.save_note(
+            vault_path,
+            "global body",
+            title="GlobalNote",
+            workspace="global",
+        )
+        # No workspace canvas should be created for global notes
+        notes_dir = vault_path / "notes"
+        assert not (notes_dir / "Workspace Map.canvas").exists()
+
 
 class TestListWorkspaces:
     def test_enumerates(self, vault_path: Path) -> None:

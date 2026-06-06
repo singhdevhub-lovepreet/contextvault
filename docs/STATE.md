@@ -1,6 +1,6 @@
 # ContextVault — project state & handoff
 
-_Last updated: 2026-06-06 (end of v0.2 fixes)_
+_Last updated: 2026-06-06 (v0.2 items #1–#5, #7–#9, #11–#13 complete)_
 
 This is the "pick this up in a new session" doc. Read it first if you're returning to the project after a gap, handing it off, or briefing another AI on what's done and what's next.
 
@@ -8,12 +8,18 @@ This is the "pick this up in a new session" doc. Read it first if you're returni
 
 ## TL;DR
 
-- **Version**: `0.1.0-alpha`, 7 phases shipped + v0.2 fixes, **288 tests** green, ruff + mypy strict clean across **28 source files**.
+- **Version**: `0.1.0-alpha`, 7 phases shipped + v0.2 items #1–#5, #7–#9, #11–#13, **333 tests** green, ruff + mypy strict clean across **30 source files**.
 - **Working end-to-end**: init → manual capture → recall (CLI, HTTP, MCP) → vault visible in Obsidian.
 - **Auto-capture hooks work** with the v2 hooks.json (uses `$CLAUDE_PROJECT_DIR`, no `UserPromptSubmit` matcher). The first version (`$PWD` + `^/clear` matcher) was buggy and is fixed.
 - **Sweeper daemon** captures sessions killed before Stop hook fires (launchd, runs every 2min).
 - **Persistent BM25 index** at `.vault-meta/bm25/index.json`, updated incrementally on capture.
-- **No remote pushed.** Local-only repo at `/Users/lovepreetsingh/Desktop/contextvault/`. Seven commits on `main`.
+- **Cosine rerank** via `ollama` embeddings (opt-in; identity fallback when absent).
+- **LLM-quality summarizer** via Anthropic API behind `--allow-egress` consent.
+- **10 lint checks** including stale-claim detection and semantic-drift (cosine) tiling.
+- **`contextvault export`** to zip a workspace for sharing/archival.
+- **Windows path-encoding** via `_strip_root()` helper handling drive letters.
+- **Hermes adapter** — `contextvault adapter add hermes` generates system prompt + launchd plist for HTTP server.
+- **Pushed to GitHub**: https://github.com/singhdevhub-lovepreet/contextvault (8 commits on `main`).
 
 ---
 
@@ -25,7 +31,7 @@ This is the "pick this up in a new session" doc. Read it first if you're returni
 | 1 | `vault.py`, `workspace.py`, `retrieve/bm25.py`, `retrieve/query.py`, `config.py`. CLI `init` + `recall`. | ✅ |
 | 2 | `capture/{claude_code,redact,summarize,runner}.py`. CLI `capture`. Adapter `claude_code/hooks.json` template. | ✅ |
 | 3 | `server/{tools,mcp,http,auth}.py`. `adapters/__init__.py` (claude-code installer, cursor snippet). CLI `serve`, `adapter add/remove`, `lint`, `workspaces ls`. | ✅ |
-| 4 | `lint/checks.py` (8 checks). `graph/{neighborhood,canvas}.py`. Capture auto-regenerates canvas. CLI `hot`, `ingest`, `save`. | ✅ |
+| 4 | `lint/checks.py` (10 checks). `graph/{neighborhood,canvas}.py`. Capture auto-regenerates canvas. CLI `hot`, `ingest`, `save`, `export`. | ✅ |
 | 5 | `obsidian-plugin/` — TypeScript Obsidian companion (status bar, 3 commands, settings tab). | ✅ |
 | 6 | `docs/*` (quickstart, architecture, api, privacy, session-capture, adapters/*). CHANGELOG. | ✅ |
 
@@ -53,25 +59,17 @@ contextvault adapter add claude-code
 # Restart Claude Code
 ```
 
-### 3. Extractive summarizer clips backtick-wrapped decisions
+### 3. ✅ FIXED: Extractive summarizer clips backtick-wrapped decisions
 
-Example seen in a real capture: decisions list contains `use a \`` and `debug before touching \`~/`. The regex in `summarize.py::_DECISION_PATTERNS` matches at backtick boundaries instead of stopping at sentence boundaries.
+Fixed in commit `d4e4dba`. The regex in `summarize.py::_DECISION_PATTERNS` was tightened to require a closing backtick or sentence-end punctuation. Three passing tests confirm the fix (`TestBacktickInDecisions`).
 
-**Fix scope**: small. Tighten the regex to require a closing backtick or sentence-end punctuation. ~10 lines, ~3 new test cases. Lives in `src/contextvault/capture/summarize.py:39-46`.
+### 4. ✅ FIXED: Recall index rebuilt on every call
 
-### 4. Recall index rebuilt on every call
+Fixed — persistent BM25 index at `.vault-meta/bm25/index.json`, updated incrementally on capture via `retrieve/persist.py`.
 
-`retrieve/query.py::build_index` walks the entire vault on every `recall` invocation. Fine for vaults under ~10k notes; slow above that.
+### 5. ✅ FIXED: No sweeper daemon for Ctrl+C / crash captures
 
-**Fix scope**: persist `.vault-meta/bm25/index.json`, update incrementally from `capture/runner.py` after each session write. ~80 lines + 8 tests. Tracked as v0.2 below.
-
-### 5. No sweeper daemon for Ctrl+C / crash captures
-
-If a Claude Code session is killed before its Stop hook fires (Ctrl+C, kill -9, terminal close), the transcript is on disk but never captured.
-
-**Workaround today**: `contextvault capture --cwd /path/to/project` manually. The checkpoint is idempotent so re-running is safe.
-
-**Proper fix**: ship the sweeper (Phase 2 plan: launchd plist + `capture/sweeper.py`). The scaffold is in the plan doc but the module isn't written.
+Fixed — `capture/sweeper.py` + launchd plist. `contextvault sweep --stable-seconds 90` scans for stale transcripts.
 
 ---
 
@@ -79,19 +77,19 @@ If a Claude Code session is killed before its Stop hook fires (Ctrl+C, kill -9, 
 
 | # | Item | Effort | Files |
 |---|---|---|---|
-| 1 | **Sweeper daemon** for Ctrl+C / killed sessions | ~1 day | New `capture/sweeper.py` + `LaunchAgents/com.contextvault.sweeper.plist` + `bin/install-launchd.sh`. 90s mtime-stable scan over `~/.claude/projects/*.jsonl`, capture missed ones. |
-| 2 | **Persistent BM25 index** updated incrementally on capture | ~1 day | `retrieve/persist.py` (new). Update `retrieve/query.py::run_recall` to load-if-present + fall-back-to-rebuild. Hook capture/runner to `add_document`/`save`. |
-| 3 | **`--session-id` flag on capture** to re-process a specific transcript | ~1 hour | `cli.py::_run_capture` + `capture/runner.py::run_capture`. Mostly arg plumbing. |
-| 4 | **Cosine rerank via ollama** as opt-in retrieval-quality tier | ~½ day | `retrieve/rerank.py` (new). Wire from `retrieve/query.py`. Feature-gate behind ollama import; identity fallback if absent. Add `[rerank]` extra to pyproject. |
-| 5 | **`--llm-summarize` mode** for capture (Anthropic-API re-summary) | ~½ day | Egress-gated (`--allow-egress`). Re-summarize after extractive pass. Update `capture/runner.py` + `capture/summarize.py`. Add `[egress]` extra. |
+| 1 | ✅ **Sweeper daemon** for Ctrl+C / killed sessions | done | `capture/sweeper.py` + launchd plist. |
+| 2 | ✅ **Persistent BM25 index** updated incrementally on capture | done | `retrieve/persist.py`. |
+| 3 | ✅ **`--session-id` flag on capture** to re-process a specific transcript | done | `cli.py`, `capture/runner.py`. Arg plumbing + 3 tests. |
+| 4 | ✅ **Cosine rerank via ollama** as opt-in retrieval-quality tier | done | `retrieve/rerank.py` (new). Wired from `retrieve/query.py`. Identity fallback if ollama absent. 6 tests. |
+| 5 | ✅ **`--llm-summarize` mode** for capture (Anthropic-API re-summary) | done | `capture/summarize.py::llm_refine_summary`, `capture/runner.py` `allow_egress` param, `cli.py` plumbing. 4 tests. |
 | 6 | **URL ingestion** (`contextvault ingest https://...`) | ~½ day | Replace the exit-64 stub in `cli.py::_run_ingest`. Fetch via stdlib `urllib`, optional defuddle via a regex pass (no extra deps). |
-| 7 | **Stale-claim lint check** | ~1 day | New `lint/checks.py::find_stale_claims`. Compare frontmatter `updated` against sources cited in same note's body. |
-| 8 | **Semantic-tiling lint check** (cosine drift) | ~1 day | Requires embedding cache. Hard-gate behind `[rerank]` extra. |
-| 9 | **Per-workspace canvas auto-refresh on save_note too** | ~1 hour | `server/tools.py::save_note` calls `graph/canvas.py::regenerate_workspace_canvas` after write. Tests: add 2 cases. |
+| 7 | ✅ **Stale-claim lint check** | done | `lint/checks.py::find_stale_claims`. Compares frontmatter `updated` timestamps. 4 tests. |
+| 8 | ✅ **Semantic-tiling lint check** (cosine drift) | done | `lint/checks.py::find_semantic_drift`. Embedding cache at `.vault-meta/embeddings/cache.json`. 4 tests. |
+| 9 | ✅ **Per-workspace canvas auto-refresh on save_note too** | done | `server/tools.py::save_note` calls `regenerate_workspace_canvas` after write. 2 tests. |
 | 10 | **Obsidian plugin: community-browser submission** | ~2 days (PR review) | Already build-ready in `obsidian-plugin/`. Just `npm install && npm run build`, then submit to `obsidianmd/obsidian-releases`. |
-| 11 | **Tune extractive decision regex** | ~½ hour | See bug 3. |
-| 12 | **`contextvault export --workspace X`** (zip a workspace for sharing) | ~2 hours | New CLI subcommand. Bundle `workspaces/<id>/` into a zip; include manifest. |
-| 13 | **Windows path-encoding support** | ~1 day | `workspace.py::encode` assumes POSIX `/` separators. Add `\\` handling. Add CI matrix entry for windows-latest. |
+| 11 | ✅ **Tune extractive decision regex** | done | Fixed in commit `d4e4dba`. See bug 3. |
+| 12 | ✅ **`contextvault export --workspace X`** (zip a workspace for sharing) | done | New CLI subcommand. `--workspace` (required) + `--output`. Zip with `manifest.json`. 6 tests. |
+| 13 | ✅ **Windows path-encoding support** | done | `workspace.py::_strip_root()` helper handles POSIX roots + Windows drive letters. 6 tests. |
 
 ---
 
@@ -99,10 +97,10 @@ If a Claude Code session is killed before its Stop hook fires (Ctrl+C, kill -9, 
 
 ```bash
 cd /Users/lsingh/Desktop/experiments/contextvault
-.venv/bin/pytest tests/ -q                          # should be 285/285 green
+.venv/bin/pytest tests/ -q                          # should be 333+ green
 .venv/bin/ruff check src/ tests/                    # should be clean
 .venv/bin/mypy src/                                 # should be clean
-git log --oneline                                   # 7 commits, all on main, no remote
+git log --oneline                                   # commits on main
 ```
 
 If you want a working install on your PATH:
@@ -124,19 +122,19 @@ The original plan that drove everything: `~/.claude/plans/i-want-to-integrate-to
 
 ```
 src/contextvault/
-├── cli.py                                          ← 10-subcommand dispatcher
+├── cli.py                                          ← 11-subcommand dispatcher
 ├── config.py                                       ← vault path + token + XDG
 ├── workspace.py                                    ← cwd → workspace-id encoder
 ├── vault.py                                        ← atomic write + fcntl locks
-├── retrieve/{bm25,query}.py                        ← Okapi BM25 + scope-filtered recall
-├── capture/{claude_code,summarize,redact,runner}.py ← transcript → session note
-├── lint/checks.py                                  ← 8 checks
+├── retrieve/{bm25,query,rerank,persist}.py         ← BM25 + cosine rerank + scope-filtered recall
+├── capture/{claude_code,summarize,redact,runner}.py ← transcript → session note + LLM refinement
+├── lint/checks.py                                  ← 10 checks (incl. stale-claim + semantic-drift)
 ├── graph/{neighborhood,canvas}.py                  ← wikilinks + Obsidian canvas
 ├── server/{tools,mcp,http,auth}.py                 ← MCP stdio + HTTP loopback
 └── adapters/                                       ← claude-code installer, cursor snippet
     └── claude_code/hooks.json                      ← THE hooks template (v2, fixed)
 
-tests/                                              ← 285 cases, hermetic
+tests/                                              ← 333+ cases, hermetic
 obsidian-plugin/                                    ← TypeScript companion (esbuild)
 docs/                                               ← quickstart, architecture, api, privacy
 ```

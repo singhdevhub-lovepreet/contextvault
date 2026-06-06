@@ -36,6 +36,7 @@ def _add_capture(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> No
         default="incremental",
         help="capture mode (see docs/session-capture.md)",
     )
+    p.add_argument("--session-id", help="capture a specific session transcript instead of the most recent")
     p.add_argument("--allow-egress", action="store_true", help="enable LLM-quality summarizer")
     p.add_argument("--allow-redacted", action="store_true", help="proceed past redaction matches")
 
@@ -100,6 +101,12 @@ def _add_save(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.add_argument("--workspace", help="target workspace id (default: current)")
 
 
+def _add_export(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser("export", help="export a workspace as a zip archive")
+    p.add_argument("--workspace", required=True, help="workspace id to export")
+    p.add_argument("--output", help="output zip path (default: <workspace>.zip)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="contextvault",
@@ -118,6 +125,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_adapter(sub)
     _add_ingest(sub)
     _add_save(sub)
+    _add_export(sub)
     return parser
 
 
@@ -143,6 +151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "ingest": _run_ingest,
         "save": _run_save,
         "sweep": _run_sweep,
+        "export": _run_export,
     }
     handler = dispatch.get(args.command)
     if handler is not None:
@@ -182,7 +191,11 @@ def _run_capture(args: argparse.Namespace) -> int:
         return 3
 
     try:
-        result = run_capture(vault_path, args.cwd)
+        result = run_capture(
+            vault_path, args.cwd,
+            session_id=args.session_id,
+            allow_egress=args.allow_egress,
+        )
     except WorkspaceError as exc:
         sys.stderr.write(f"contextvault capture: {exc}\n")
         return 2
@@ -298,6 +311,8 @@ def _run_adapter(args: argparse.Namespace) -> int:
                 lines = adapters.install_claude_code()
             elif args.client == "cursor":
                 lines = adapters.install_cursor()
+            elif args.client == "hermes":
+                lines = adapters.install_hermes()
             else:
                 sys.stderr.write(f"contextvault adapter add: unknown client {args.client!r}\n")
                 return 2
@@ -313,6 +328,8 @@ def _run_adapter(args: argparse.Namespace) -> int:
             lines = adapters.remove_claude_code()
         elif args.client == "cursor":
             lines = ["Cursor MCP entries are user-managed in ~/.cursor/mcp.json — remove manually."]
+        elif args.client == "hermes":
+            lines = adapters.remove_hermes()
         else:
             sys.stderr.write(f"contextvault adapter remove: unknown client {args.client!r}\n")
             return 2
@@ -492,6 +509,64 @@ def _run_save(args: argparse.Namespace) -> int:
         return 2
 
     sys.stdout.write(f"saved → {result['path']}\n")
+    return 0
+
+
+def _run_export(args: argparse.Namespace) -> int:
+    import json as _json
+    import shutil
+    import tempfile
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from contextvault import config, workspace
+
+    ws_id = args.workspace
+    if not workspace.is_valid_id(ws_id):
+        sys.stderr.write(f"contextvault export: invalid workspace id {ws_id!r}\n")
+        return 2
+
+    vault_path = config.resolve_vault_path(None)
+    if not vault_path.is_dir():
+        sys.stderr.write(f"contextvault export: vault not found at {vault_path}\n")
+        return 3
+
+    ws_dir = vault_path / "workspaces" / ws_id
+    if not ws_dir.is_dir():
+        sys.stderr.write(f"contextvault export: workspace does not exist: {ws_id}\n")
+        return 2
+
+    with tempfile.TemporaryDirectory() as staging:
+        stage = Path(staging) / ws_id
+        shutil.copytree(ws_dir, stage)
+
+        file_count = sum(1 for _ in stage.rglob("*") if _.is_file())
+        manifest = {
+            "workspace_id": ws_id,
+            "exported_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "file_count": file_count,
+        }
+        (stage / "manifest.json").write_text(
+            _json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        # Default output: strip leading hyphen from workspace id
+        if args.output:
+            out_path = args.output
+        else:
+            safe_name = ws_id.lstrip("-") or "workspace"
+            out_path = f"{safe_name}.zip"
+
+        # shutil.make_archive wants the base name without .zip
+        if out_path.endswith(".zip"):
+            base = out_path[:-4]
+        else:
+            base = out_path
+            out_path = f"{out_path}.zip"
+
+        shutil.make_archive(base, "zip", staging, ws_id)
+
+    sys.stdout.write(f"exported → {out_path}\n")
     return 0
 
 

@@ -1,29 +1,24 @@
-"""Vault lint — eight automated checks.
+"""Vault lint — ten automated checks.
 
 Each check function returns a list of :class:`LintFinding` records. The
-checks are intentionally cheap and deterministic — no LLM, no network.
-The full set:
+first eight checks are cheap and deterministic — no LLM, no network.
+The last two use optional embeddings via ``ollama``.
 
-  1. ``find_orphans``                — notes with zero inbound wikilinks
-  2. ``find_dead_links``             — wikilinks to nonexistent notes
-  3. ``find_missing_frontmatter``    — notes missing required keys
-  4. ``find_empty_sections``         — ``## Heading`` with no content
-  5. ``find_duplicate_titles``       — two notes with the same basename
-  6. ``find_broken_markdown_links``  — ``[text](path)`` to missing files
-  7. ``find_huge_notes``             — > 200KB notes (capture runaway)
-  8. ``find_unused_tags``            — frontmatter tags appearing only once
-
-Skipped on purpose (require LLM or embeddings):
-
-  * stale-claim detection (newer source contradicts older page)
-  * semantic-tiling drift (chunk similarity matrix)
-
-These two are the upstream ``wiki-lint`` checks 3 and 10. We surface them
-as future work but ship without them.
+  1.  ``find_orphans``                — notes with zero inbound wikilinks
+  2.  ``find_dead_links``             — wikilinks to nonexistent notes
+  3.  ``find_missing_frontmatter``    — notes missing required keys
+  4.  ``find_empty_sections``         — ``## Heading`` with no content
+  5.  ``find_duplicate_titles``       — two notes with the same basename
+  6.  ``find_broken_markdown_links``  — ``[text](path)`` to missing files
+  7.  ``find_huge_notes``             — > 200KB notes (capture runaway)
+  8.  ``find_unused_tags``            — frontmatter tags appearing only once
+  9.  ``find_stale_claims``           — citing note older than cited note
+  10. ``find_semantic_drift``         — near-duplicate notes (cosine ≥ 0.92)
 """
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -40,6 +35,8 @@ __all__ = [
     "find_huge_notes",
     "find_missing_frontmatter",
     "find_orphans",
+    "find_semantic_drift",
+    "find_stale_claims",
     "find_unused_tags",
     "run",
 ]
@@ -379,6 +376,178 @@ def find_unused_tags(
     return findings
 
 
+def find_stale_claims(
+    vault: Vault, scope: str | None = None
+) -> list[LintFinding]:
+    """Citing note older than the cited note — claim may be stale.
+
+    Uses frontmatter ``updated`` fields (ISO8601 strings compare
+    lexicographically). Notes without an ``updated`` field are skipped.
+    """
+    notes = _all_notes(vault, scope)
+    basenames = _basename_index(notes)
+
+    # Build updated-timestamp map
+    updated_map: dict[str, str] = {}
+    for rel in notes:
+        text = vault.read(rel) or ""
+        meta, _ = _parse_frontmatter(text)
+        ts = meta.get("updated", "")
+        if ts:
+            updated_map[rel] = ts
+
+    findings: list[LintFinding] = []
+    for rel in notes:
+        citer_ts = updated_map.get(rel)
+        if not citer_ts:
+            continue
+        text = vault.read(rel) or ""
+        for match in _WIKILINK_RE.finditer(text):
+            target = match.group(1).strip()
+            for resolved in basenames.get(target, []):
+                if resolved == rel:
+                    continue
+                cited_ts = updated_map.get(resolved)
+                if not cited_ts:
+                    continue
+                if cited_ts > citer_ts:
+                    findings.append(
+                        LintFinding(
+                            category="stale_claim",
+                            severity="warn",
+                            path=rel,
+                            message=(
+                                f"cites [[{target}]] (updated {cited_ts}) "
+                                f"but this note was last updated {citer_ts}"
+                            ),
+                        )
+                    )
+    return findings
+
+
+# --- Embedding-based checks (optional ollama dependency) -----------------
+
+try:
+    import ollama as _ollama  # type: ignore[import-not-found]
+
+    _HAS_OLLAMA = True
+except ImportError:
+    _ollama = None
+    _HAS_OLLAMA = False
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Cosine similarity between two equal-length vectors."""
+    dot = float(sum(x * y for x, y in zip(a, b, strict=False)))
+    norm_a = float(sum(x * x for x in a) ** 0.5)
+    norm_b = float(sum(x * x for x in b) ** 0.5)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def find_semantic_drift(
+    vault: Vault, scope: str | None = None
+) -> list[LintFinding]:
+    """Near-duplicate notes detected via cosine similarity of embeddings.
+
+    Requires ``ollama`` with ``nomic-embed-text`` model. Returns an empty
+    list if ollama is not installed or embedding fails.
+    """
+    if not _HAS_OLLAMA:
+        return []
+
+    notes = _all_notes(vault, scope)
+    # Filter out very short notes (< 50 chars of content)
+    note_texts: list[tuple[str, str]] = []
+    for rel in notes:
+        text = vault.read(rel) or ""
+        if len(text) < 50:
+            continue
+        note_texts.append((rel, text))
+
+    if len(note_texts) < 2:
+        return []
+
+    # Load embedding cache
+    import json
+
+    cache_rel = ".vault-meta/embeddings/cache.json"
+    cache: dict[str, dict[str, object]] = {}
+    cache_raw = vault.read(cache_rel)
+    if cache_raw:
+        try:
+            cache = json.loads(cache_raw)
+        except json.JSONDecodeError:
+            cache = {}
+
+    # Determine which notes need fresh embeddings
+    embeddings: dict[str, list[float]] = {}
+    uncached_rels: list[str] = []
+    uncached_texts: list[str] = []
+
+    for rel, text in note_texts:
+        try:
+            mtime = str((vault.root / rel).stat().st_mtime)
+        except OSError:
+            mtime = ""
+        cached = cache.get(rel)
+        if cached and cached.get("mtime") == mtime and "embedding" in cached:
+            embeddings[rel] = cached["embedding"]  # type: ignore[assignment]
+        else:
+            uncached_rels.append(rel)
+            uncached_texts.append(text)
+
+    # Compute fresh embeddings
+    if uncached_texts:
+        try:
+            resp = _ollama.embed(model="nomic-embed-text", input=uncached_texts)
+            new_embeddings = resp["embeddings"] if isinstance(resp, dict) else resp.embeddings
+            for rel_path, emb in zip(uncached_rels, new_embeddings, strict=False):
+                embeddings[rel_path] = emb
+                try:
+                    mtime = str((vault.root / rel_path).stat().st_mtime)
+                except OSError:
+                    mtime = ""
+                cache[rel_path] = {"mtime": mtime, "embedding": emb}
+        except Exception:
+            # Embedding failure — skip semantic drift entirely
+            return []
+
+    # Save updated cache
+    with contextlib.suppress(Exception):
+        vault.write(cache_rel, json.dumps(cache, ensure_ascii=False) + "\n")
+
+    # Compare all pairs
+    findings: list[LintFinding] = []
+    rels = [rel for rel, _ in note_texts if rel in embeddings]
+    seen_pairs: set[tuple[str, str]] = set()
+    for i, rel_a in enumerate(rels):
+        emb_a = embeddings[rel_a]
+        for rel_b in rels[i + 1 :]:
+            emb_b = embeddings[rel_b]
+            if len(emb_a) != len(emb_b):
+                continue
+            sim = _cosine_similarity(emb_a, emb_b)
+            if sim >= 0.92:
+                pair = (min(rel_a, rel_b), max(rel_a, rel_b))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                findings.append(
+                    LintFinding(
+                        category="semantic_drift",
+                        severity="info",
+                        path=rel_a,
+                        message=(
+                            f"high similarity ({sim:.2f}) with {rel_b} — "
+                            f"possible near-duplicate"
+                        ),
+                    )
+                )
+    return findings
+
+
 def run(vault: Vault, *, scope: str | None = None) -> list[LintFinding]:
     """Run every available check and return the combined list of findings.
 
@@ -395,4 +564,6 @@ def run(vault: Vault, *, scope: str | None = None) -> list[LintFinding]:
         *find_broken_markdown_links(vault, scope=scope),
         *find_huge_notes(vault, scope=scope),
         *find_unused_tags(vault, scope=scope),
+        *find_stale_claims(vault, scope=scope),
+        *find_semantic_drift(vault, scope=scope),
     ]

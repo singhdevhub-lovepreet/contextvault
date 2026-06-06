@@ -90,6 +90,13 @@ def run_recall(
     idx, _ = load_or_build(vault)
     hits = idx.query(query, top_k=top_k, scope=scope)
 
+    try:
+        from contextvault.retrieve.rerank import rerank_hits
+
+        hits = rerank_hits(query, hits, vault, top_k=top_k)
+    except Exception:
+        pass
+
     out: list[RecallHit] = []
     for hit in hits:
         text = vault.read(hit["doc_id"]) or ""

@@ -9,6 +9,7 @@ import pytest
 
 from contextvault.workspace import (
     WorkspaceError,
+    _strip_root,
     current,
     encode,
     is_valid_id,
@@ -123,6 +124,30 @@ class TestResolve:
     def test_rejects_empty_cwd(self, tmp_path: Path) -> None:
         with pytest.raises(WorkspaceError):
             resolve(tmp_path, "")
+
+
+class TestEncodeWindows:
+    """Test _strip_root with synthetic tuples — no platform mocking needed."""
+
+    def test_posix_root(self) -> None:
+        assert _strip_root(("/", "Users", "foo")) == ("Users", "foo")
+
+    def test_windows_drive(self) -> None:
+        assert _strip_root(("C:\\", "Users", "foo")) == ("Users", "foo")
+
+    def test_windows_drive_d(self) -> None:
+        assert _strip_root(("D:\\", "Projects", "bar")) == ("Projects", "bar")
+
+    def test_empty_parts_raises(self) -> None:
+        with pytest.raises(WorkspaceError, match="no parts"):
+            _strip_root(())
+
+    def test_invalid_root_raises(self) -> None:
+        with pytest.raises(WorkspaceError, match="filesystem root"):
+            _strip_root(("relative", "path"))
+
+    def test_posix_root_only(self) -> None:
+        assert _strip_root(("/",)) == ()
 
 
 class TestCurrent:

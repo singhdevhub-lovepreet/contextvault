@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -22,11 +24,13 @@ __all__ = [
     "SUPPORTED_CLIENTS",
     "install_claude_code",
     "install_cursor",
+    "install_hermes",
     "remove_claude_code",
+    "remove_hermes",
 ]
 
 
-SUPPORTED_CLIENTS = ("claude-code", "cursor")
+SUPPORTED_CLIENTS = ("claude-code", "cursor", "hermes")
 
 
 def _claude_settings_path() -> Path:
@@ -99,9 +103,101 @@ def install_cursor() -> list[str]:
     ]
 
 
-# --------------------------------------------------------------------------
-# Internal helpers
-# --------------------------------------------------------------------------
+def install_hermes(*, plist_path: Path | None = None) -> list[str]:
+    """Generate Hermes system prompt + launchd plist for HTTP server.
+
+    Hermes doesn't support MCP — it uses the HTTP loopback endpoint.
+    This adapter creates:
+      1. A launchd plist to keep the HTTP server running (optional, user activates)
+      2. The system prompt template to paste into Hermes Chat settings
+    """
+    plist_path = plist_path or Path("~/Library/LaunchAgents/contextvault.plist").expanduser()
+    token_path = Path("~/.config/contextvault/token").expanduser()
+
+    # Read token if exists for the system prompt
+    token = ""
+    if token_path.exists():
+        token = token_path.read_text(encoding="utf-8").strip()
+
+    # System prompt template (from docs/adapters/hermes.md)
+    system_prompt = f"""You have access to a persistent memory at http://127.0.0.1:7842.
+
+Tools available (HTTP GET unless noted):
+
+  /recall?query=<terms>&cwd=<absolute path>&scope=workspace
+      → JSON array of {{path, workspace, score, preview}}
+  /recent_sessions?cwd=<absolute path>&limit=5
+      → JSON array of recent session frontmatters
+  /list_workspaces
+      → JSON array of {{workspace, session_count, updated_at}}
+  /lint?scope=workspace&cwd=<absolute path>
+      → JSON array of lint findings
+  POST /save_note  body: {{"title": "...", "body": "...", "workspace": "current", "cwd": "..."}}
+      → {{"path": "..."}}
+
+Auth: every request needs `Authorization: Bearer {token}` where TOKEN is
+in ~/.config/contextvault/token.
+
+Before answering questions about past sessions, recent decisions, or
+files-touched-yesterday, call /recall and ground your answer in the
+preview text. Cite paths when you do."""
+
+    # launchd plist for background HTTP server (port 7842)
+    plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>contextvault</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>{shutil.which('contextvault') or '/usr/local/bin/contextvault'}</string>
+      <string>serve</string>
+      <string>--http</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{os.environ.get('PATH', '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin')}</string>
+    </dict>
+</dict>
+</plist>"""
+
+    # Actually write the plist
+    plist_path.parent.mkdir(parents=True, exist_ok=True)
+    plist_path.write_text(plist_content, encoding="utf-8")
+
+    return [
+        "=== Hermes Adapter ===",
+        "",
+        "1. SYSTEM PROMPT (paste into Hermes → Settings → System Prompt):",
+        "",
+        system_prompt,
+        "",
+        "2. OPTIONAL: Background HTTP server via launchd",
+        f"   plist created at: {plist_path}",
+        "   To enable (runs HTTP server at login on port 7842):",
+        f"     launchctl load {plist_path}",
+        "",
+        "   Or run manually anytime:",
+        "     contextvault serve --http",
+        "",
+        "3. VERIFY: Once server is running, test with:",
+        f"   curl -H \\\"Authorization: Bearer {token}\\\" http://127.0.0.1:7842/list_workspaces",
+    ]
+
+
+def remove_hermes(*, plist_path: Path | None = None) -> list[str]:
+    """Remove Hermes launchd plist (system prompt is user-managed)."""
+    plist_path = plist_path or Path("~/Library/LaunchAgents/contextvault.plist").expanduser()
+    if not plist_path.exists():
+        return [f"nothing to remove ({plist_path} does not exist)"]
+
+    subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
+
+    plist_path.unlink()
+    return [f"removed Hermes launchd plist from {plist_path}"]
 
 
 def _load_hooks_template() -> dict[str, object]:

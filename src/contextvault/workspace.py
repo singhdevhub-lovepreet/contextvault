@@ -29,6 +29,7 @@ from pathlib import Path
 
 __all__ = [
     "WorkspaceError",
+    "_strip_root",
     "current",
     "encode",
     "is_valid_id",
@@ -73,11 +74,34 @@ def encode(cwd: str | os.PathLike[str]) -> str:
     # the same workspace dirs under ``~/.claude/projects/``.
     normalized = os.path.normpath(expanded)
     parts = Path(normalized).parts
-    if not parts or parts[0] != os.sep:
-        raise WorkspaceError(f"cwd does not start at filesystem root: {normalized!s}")
+    stripped = _strip_root(parts)
 
     # /Users/lsingh/Desktop/experiments  →  -Users-lsingh-Desktop-experiments
-    return "-" + "-".join(parts[1:]) if len(parts) > 1 else "-"
+    return "-" + "-".join(stripped) if stripped else "-"
+
+
+def _strip_root(parts: tuple[str, ...]) -> tuple[str, ...]:
+    """Remove the filesystem root element from a path's parts tuple.
+
+    Handles both POSIX roots (``('/',)``) and Windows drive letters
+    (``('C:\\\\',)``). Raises :class:`WorkspaceError` if the root element
+    is unrecognised.
+    """
+    if not parts:
+        raise WorkspaceError("path has no parts")
+
+    root = parts[0]
+    # POSIX root
+    if root == os.sep:
+        return parts[1:]
+    # Windows drive letter: e.g. 'C:\\' or 'D:\\'
+    if len(root) == 3 and root[1] == ":" and root[2] in ("/", "\\"):
+        return parts[1:]
+    # Mounted POSIX root on Windows ('\\')?
+    if root == "\\":
+        return parts[1:]
+
+    raise WorkspaceError(f"cwd does not start at filesystem root: {root!r}")
 
 
 def is_valid_id(workspace_id: str) -> bool:

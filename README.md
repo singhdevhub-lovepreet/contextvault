@@ -20,14 +20,18 @@ ContextVault auto-captures your Claude Code sessions, files them into a knowledg
 ## Install
 
 ```bash
-pipx install contextvault
+git clone git@github.com:singhdevhub-lovepreet/contextvault.git
+cd contextvault
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+
 contextvault init                       # scaffold vault + write config + generate token
 contextvault adapter add claude-code    # install hooks into ~/.claude/settings.json
 contextvault adapter add cursor         # print Cursor MCP snippet to paste
-contextvault serve --both &             # MCP (stdio) + HTTP (127.0.0.1:7842)
+hermes mcp add contextvault --command contextvault --args serve  # Hermes (native MCP)
 ```
 
-See `docs/quickstart.md` for the full setup walkthrough.
+See [`docs/quickstart.md`](docs/quickstart.md) for the full setup walkthrough.
 
 > **Picking this up after a gap?** Start at [`docs/STATE.md`](docs/STATE.md) — current phase status, known bugs, v0.2 backlog, and how to rebuild context fast.
 
@@ -58,6 +62,7 @@ contextvault recall QUERY [--cwd PATH] [--scope workspace|global] [-k N]
 contextvault lint [--cwd PATH] [--scope workspace|global]
 contextvault hot [--workspace WS]
 contextvault workspaces ls
+contextvault export --workspace=WS [--output PATH]
 contextvault adapter {add,remove} {claude-code,cursor,claude-desktop,continue-dev,hermes}
 contextvault ingest FILE_OR_URL [--workspace WS]
 contextvault save --title T --type TYPE          # stdin → note

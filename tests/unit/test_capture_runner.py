@@ -104,6 +104,27 @@ class TestRunCapture:
         )
         assert result is None
 
+    def test_explicit_session_id_hit(
+        self, vault_path: Path, projects_root: Path
+    ) -> None:
+        result = run_capture(
+            vault_path, FIXTURE_CWD, session_id=FIXTURE_SID, projects_root=projects_root
+        )
+        assert result is not None
+        assert result.wrote_note is True
+        assert result.session_id == FIXTURE_SID
+
+    def test_nonexistent_session_id_returns_none(
+        self, vault_path: Path, projects_root: Path
+    ) -> None:
+        result = run_capture(
+            vault_path,
+            FIXTURE_CWD,
+            session_id="00000000-0000-0000-0000-000000000000",
+            projects_root=projects_root,
+        )
+        assert result is None
+
     def test_redaction_masks_aws_key(
         self, tmp_path: Path, vault_path: Path
     ) -> None:

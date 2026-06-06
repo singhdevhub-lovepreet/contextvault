@@ -30,7 +30,7 @@ from contextvault.capture.claude_code import (
     read_transcript,
 )
 from contextvault.capture.redact import RedactionEvent, redact_text
-from contextvault.capture.summarize import SessionSummary, summarize
+from contextvault.capture.summarize import SessionSummary, llm_refine_summary, summarize
 from contextvault.retrieve.persist import update_index
 from contextvault.vault import Vault
 from contextvault.workspace import encode
@@ -57,8 +57,10 @@ def run_capture(
     vault_path: Path,
     cwd: str,
     *,
+    session_id: str | None = None,
     projects_root: Path | None = None,
     transcript_path: Path | None = None,
+    allow_egress: bool = False,
 ) -> CaptureResult | None:
     """Capture the latest session in ``cwd`` into ``vault_path``.
 
@@ -71,7 +73,9 @@ def run_capture(
     workspace = encode(cwd)
 
     if transcript_path is None:
-        transcript_path = find_transcript(workspace, projects_root=projects_root)
+        transcript_path = find_transcript(
+            workspace, session_id=session_id, projects_root=projects_root
+        )
     if transcript_path is None or not transcript_path.is_file():
         return None
 
@@ -96,6 +100,11 @@ def run_capture(
         )
 
     summary = summarize(iter(records))
+
+    if allow_egress and not summary.is_empty:
+        with contextlib.suppress(Exception):
+            summary = llm_refine_summary(summary)
+
     if summary.is_empty:
         # Records existed but contained no signal worth filing — bump
         # checkpoint so we don't reprocess them next time, but write

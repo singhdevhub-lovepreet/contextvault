@@ -21,6 +21,7 @@ ground itself in.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -33,7 +34,7 @@ from contextvault.capture.claude_code import (
     UserMessage,
 )
 
-__all__ = ["SessionSummary", "summarize"]
+__all__ = ["SessionSummary", "llm_refine_summary", "summarize"]
 
 
 # Bash commands that are pure reads / introspection. The capture surface
@@ -252,3 +253,75 @@ def _first_sentence(text: str) -> str:
         if 5 <= idx <= 300:
             return stripped[: idx + 1].strip()
     return stripped[:300]
+
+
+# --------------------------------------------------------------------------
+# Optional LLM refinement (behind --allow-egress)
+# --------------------------------------------------------------------------
+
+_log = logging.getLogger(__name__)
+
+try:
+    import anthropic as _anthropic  # type: ignore[import-not-found]
+
+    _HAS_ANTHROPIC = True
+except ImportError:
+    _anthropic = None
+    _HAS_ANTHROPIC = False
+
+
+def _build_refine_prompt(summary: SessionSummary) -> str:
+    """Build a prompt asking the LLM to re-summarize the extractive output."""
+    parts = []
+    if summary.goal:
+        parts.append(f"Goal: {summary.goal}")
+    if summary.summary_sentences:
+        parts.append("Extractive summary:\n" + "\n".join(summary.summary_sentences))
+    if summary.decisions:
+        parts.append("Decisions:\n" + "\n".join(f"- {d}" for d in summary.decisions))
+    if summary.files_touched:
+        parts.append("Files touched:\n" + "\n".join(f"- {f}" for f in summary.files_touched))
+    if summary.commands:
+        parts.append("Commands:\n" + "\n".join(f"- {c}" for c in summary.commands))
+    if summary.errors:
+        parts.append("Errors:\n" + "\n".join(f"- {e}" for e in summary.errors))
+    if summary.open_todos:
+        parts.append("Open TODOs:\n" + "\n".join(f"- {t}" for t in summary.open_todos))
+
+    body = "\n\n".join(parts)
+    return (
+        "You are a technical writer summarizing a coding session. "
+        "Rewrite the following extractive summary into a concise, "
+        "coherent narrative paragraph (2-4 sentences). Preserve all "
+        "concrete facts (file names, commands, decisions). Do not "
+        "add information not present in the input.\n\n"
+        f"{body}"
+    )
+
+
+def llm_refine_summary(summary: SessionSummary) -> SessionSummary:
+    """Re-summarize via Anthropic API for higher narrative quality.
+
+    Best-effort: returns the original summary unchanged if ``anthropic``
+    is not installed or the API call fails.
+    """
+    if not _HAS_ANTHROPIC:
+        return summary
+
+    if summary.is_empty:
+        return summary
+
+    try:
+        client = _anthropic.Anthropic()
+        prompt = _build_refine_prompt(summary)
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        refined = response.content[0].text
+        summary.summary_sentences = [refined]
+        return summary
+    except Exception:
+        _log.warning("LLM refinement failed, using extractive summary", exc_info=True)
+        return summary

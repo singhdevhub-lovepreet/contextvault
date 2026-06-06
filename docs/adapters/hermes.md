@@ -1,45 +1,88 @@
-# Hermes Chat (and other non-MCP clients)
+# Hermes Agent
 
-Anything that can issue an HTTP request can use ContextVault. Hermes Chat (and most local-LLM front-ends) don't speak MCP — they hit the HTTP loopback endpoint instead.
+Hermes has native MCP support, so it connects to ContextVault directly via the stdio MCP transport — no HTTP server needed.
 
-## Start the server
+## Setup (MCP — recommended)
+
+### 1. Make sure `contextvault` is on your PATH
+
+```bash
+# If installed in a venv:
+mkdir -p ~/.local/bin
+ln -sf /path/to/contextvault/.venv/bin/contextvault ~/.local/bin/contextvault
+export PATH="$HOME/.local/bin:$PATH"  # add to ~/.zshrc permanently
+```
+
+### 2. Register the MCP server
+
+```bash
+hermes mcp add contextvault --command contextvault --args serve
+```
+
+When prompted `Enable all 6 tools? [Y/n/select]:`, type **Y**.
+
+This registers these tools:
+
+| Tool | Description |
+|------|-------------|
+| `recall` | Search workspace memory, return top-K hits |
+| `recent_sessions` | Return N most recent session notes |
+| `save_note` | Write a Markdown note into the vault |
+| `list_workspaces` | Enumerate workspaces with session counts |
+| `graph_neighborhood` | Expand wikilink neighbors of a note |
+| `lint` | Find orphan pages, dead links, stale claims |
+
+### 3. Verify
+
+```bash
+hermes mcp list          # should show 'contextvault' with 6 tools
+hermes mcp test contextvault   # should show ✓ Connected
+```
+
+### 4. Use it
+
+```bash
+hermes chat
+```
+
+Then ask things like:
+
+- "What did I work on recently?"
+- "List my workspaces"
+- "Recall what I did with authentication"
+- "Lint my vault"
+- "Save a note titled 'TODO' with body 'fix the rate limiter'"
+
+Hermes will call the MCP tools automatically and ground its answers in your session history.
+
+## Removing
+
+```bash
+hermes mcp remove contextvault
+```
+
+## Alternative: HTTP endpoint
+
+If for some reason MCP doesn't work, Hermes can also hit the HTTP loopback endpoint.
+
+### Start the server
 
 ```bash
 contextvault serve --http &
 # →  contextvault: HTTP serving on http://127.0.0.1:7842
 ```
 
-Or run both transports (HTTP + MCP):
+Or auto-start at login via launchd:
 
 ```bash
-contextvault serve --both
+contextvault adapter add hermes
+# creates ~/Library/LaunchAgents/contextvault.plist + prints system prompt
+launchctl load ~/Library/LaunchAgents/contextvault.plist
 ```
 
-For long-running setup, drop a launchd plist (macOS) or systemd user unit (Linux) so the server starts at login. A minimal example for macOS:
+### System-prompt template
 
-```xml
-<!-- ~/Library/LaunchAgents/contextvault.plist -->
-<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-    <key>Label</key><string>contextvault</string>
-    <key>ProgramArguments</key>
-    <array>
-      <string>/usr/local/bin/contextvault</string>
-      <string>serve</string>
-      <string>--http</string>
-    </array>
-    <key>RunAtLoad</key><true/>
-    <key>KeepAlive</key><true/>
-</dict>
-</plist>
-```
-
-Then `launchctl load ~/Library/LaunchAgents/contextvault.plist`.
-
-## System-prompt template
-
-For Hermes / Ollama-served models / any local LLM, teach the model to call the endpoint:
+Paste this into Hermes settings (`hermes config edit`, set the `system_prompt` field), or pass via `-z`:
 
 ```text
 You have access to a persistent memory at http://127.0.0.1:7842.
@@ -65,7 +108,7 @@ files-touched-yesterday, call /recall and ground your answer in the
 preview text. Cite paths when you do.
 ```
 
-## curl recipes
+### curl recipes
 
 ```bash
 TOKEN=$(cat ~/.config/contextvault/token)
@@ -86,7 +129,3 @@ curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
 # List workspaces
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7842/list_workspaces
 ```
-
-## n8n / workflow tools
-
-The HTTP endpoints are stateless and return clean JSON — drop them into any HTTP node. Just remember to template the bearer token from your secrets store rather than hardcoding it.
