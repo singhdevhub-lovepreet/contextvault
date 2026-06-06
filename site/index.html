@@ -632,7 +632,7 @@
       </a>
     </div>
     <div class="install-snippet">
-      <code><span class="dollar">$</span> pip install contextvault</code>
+      <code><span class="dollar">$</span> uv pip install contextvault</code>
       <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
     </div>
   </div>
@@ -787,11 +787,13 @@
     <h2>Three commands to start</h2>
     <p>Clone, init, connect. You're capturing.</p>
 
-    <div class="code-block"><code><span class="comment"># Requires Python 3.11+  (brew install python@3.12)</span>
+    <div class="code-block"><code><span class="comment"># Install uv (downloads Python 3.12 automatically)</span>
+<span class="cmd">curl</span> -LsSf https://astral.sh/uv/install.sh | sh
+
+<span class="comment"># Clone and install</span>
 <span class="cmd">git clone</span> git@github.com:singhdevhub-lovepreet/contextvault.git
-<span class="cmd">cd</span> contextvault && <span class="cmd">python3.12</span> -m venv .venv
-.venv/bin/<span class="cmd">pip install</span> --upgrade pip
-.venv/bin/<span class="cmd">pip install</span> -e <span class="string">".[dev]"</span>
+<span class="cmd">cd</span> contextvault && <span class="cmd">uv</span> venv <span class="flag">--python</span> 3.12 .venv
+<span class="cmd">uv</span> pip install -e <span class="string">".[dev]"</span>
 
 <span class="comment"># Put on PATH</span>
 <span class="cmd">ln</span> -sf <span class="string">"$(pwd)/.venv/bin/contextvault"</span> ~/.local/bin/contextvault
@@ -913,7 +915,7 @@ function switchTab(btn, id) {
   document.getElementById('panel-' + id).classList.add('active');
 }
 function copyInstall(btn) {
-  navigator.clipboard.writeText('pip install contextvault').then(() => {
+  navigator.clipboard.writeText('uv pip install contextvault').then(() => {
     btn.textContent = 'Copied';
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);

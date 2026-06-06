@@ -4,7 +4,23 @@ Get from zero to "my next session is captured into Obsidian" in five minutes.
 
 ## 1. Install
 
-**Requires Python 3.11+** ([download](https://www.python.org/downloads/) or `brew install python@3.12`).
+**Requires Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or pip.
+
+```bash
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and install
+git clone git@github.com:singhdevhub-lovepreet/contextvault.git
+cd contextvault
+uv venv --python 3.12 .venv
+uv pip install -e ".[dev]"
+```
+
+`uv` downloads Python 3.12 automatically if it's not on your system.
+
+<details>
+<summary>Alternative: using pip directly</summary>
 
 ```bash
 git clone git@github.com:singhdevhub-lovepreet/contextvault.git
@@ -14,7 +30,9 @@ python3.12 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-> If `python3.12` isn't found, check `python3 --version`. Any 3.11+ works -- just replace `python3.12` above with your binary name.
+> If `python3.12` isn't found, check `python3 --version`. Any 3.11+ works.
+
+</details>
 
 Put `contextvault` on your PATH:
 
@@ -24,8 +42,6 @@ ln -sf "$(pwd)/.venv/bin/contextvault" ~/.local/bin/contextvault
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
-
-(Once the package is on PyPI, this becomes `pipx install contextvault`.)
 
 ## 2. Initialise the vault
 
