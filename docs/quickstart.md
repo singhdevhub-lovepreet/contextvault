@@ -1,6 +1,6 @@
 # Quickstart
 
-Get from zero to "my next Claude Code session is captured into Obsidian" in five minutes.
+Get from zero to "my next session is captured into Obsidian" in five minutes.
 
 ## 1. Install
 
@@ -26,9 +26,9 @@ source ~/.zshrc
 
 ```bash
 contextvault init
-# →  vault:  ~/Documents/ContextVault
-#    config: ~/.config/contextvault/config.toml
-#    token:  ~/.config/contextvault/token (chmod 600)
+# ->  vault:  ~/Documents/ContextVault
+#     config: ~/.config/contextvault/config.toml
+#     token:  ~/.config/contextvault/token (chmod 600)
 ```
 
 The vault is your Obsidian vault. You can pick a different location: `contextvault init --vault ~/path/to/some/vault`.
@@ -51,16 +51,16 @@ contextvault adapter add claude-code
 
 This merges hooks into `~/.claude/settings.json`:
 
-- **Stop** — captures incrementally on every turn end.
-- **SessionStart** — loads the workspace hot cache into context.
+- **Stop** -- captures incrementally on every turn end.
+- **SessionStart** -- loads the workspace hot cache into context.
 
 And registers an MCP server so Claude Code can call `recall` / `recent_sessions` / `save_note` directly.
 
 Restart Claude Code for it to pick up the new settings.
 
-### Hermes Agent
+### Hermes
 
-Hermes has native MCP support — no HTTP server needed:
+Hermes has native MCP support -- no HTTP server needed:
 
 ```bash
 hermes mcp add contextvault --command contextvault --args serve
@@ -71,7 +71,7 @@ Verify:
 
 ```bash
 hermes mcp list               # should show 'contextvault'
-hermes mcp test contextvault   # should show ✓ Connected
+hermes mcp test contextvault   # should show "Connected"
 ```
 
 Start a chat and test:
@@ -81,7 +81,7 @@ hermes chat
 # Ask: "List my workspaces" or "What did I work on recently?"
 ```
 
-See [`docs/adapters/hermes.md`](adapters/hermes.md) for the full guide including the HTTP fallback method.
+For auto-capture hooks (capture every turn), see the [README](../README.md#hermes) or the [Hermes adapter guide](adapters/hermes.md).
 
 ### Cursor
 
@@ -89,6 +89,8 @@ See [`docs/adapters/hermes.md`](adapters/hermes.md) for the full guide including
 contextvault adapter add cursor
 # prints a snippet to paste into ~/.cursor/mcp.json
 ```
+
+See [`docs/adapters/cursor.md`](adapters/cursor.md) for details.
 
 ## 4. Capture your first session
 
@@ -98,11 +100,11 @@ If you already have Claude Code sessions in `~/.claude/projects/`, capture them 
 contextvault capture --cwd "$(pwd)"
 ```
 
-Or just start a Claude Code session with the hooks installed (step 3) — it captures automatically when the session ends.
+Or just start a Claude Code session with the hooks installed (step 3) -- it captures automatically when each turn ends.
 
 ## 5. Use it
 
-In your next session — in *any* LLM client — ask it to recall:
+In your next session -- in *any* LLM client -- ask it to recall:
 
 ```text
 What did I work on in ~/some/project yesterday?
@@ -122,32 +124,32 @@ contextvault export --workspace=-Users-you-project  # zip a workspace
 
 ## 6. Browse the vault in Obsidian
 
-Open the vault in Obsidian (File → Open Vault → choose `~/Documents/ContextVault`):
+Open the vault in Obsidian (File > Open Vault > choose `~/Documents/ContextVault`):
 
 ```
 ~/Documents/ContextVault/
-├── hot.md              ← global recent-context cache
+├── hot.md              <- global recent-context cache
 ├── index.md
-├── entities/           ← shared across workspaces
+├── entities/           <- shared across workspaces
 ├── concepts/
 └── workspaces/
     └── -Users-you-some-project/
         ├── hot.md
         ├── log.md
-        ├── Workspace Map.canvas    ← visual hub, auto-regenerated
+        ├── Workspace Map.canvas    <- visual hub, auto-regenerated
         └── sessions/
             └── 2026-06-02-...md
 ```
 
-Open the canvas for a visual view. Or use Obsidian's graph view (Cmd+G) — wikilinks between sessions, entities, and concepts render as a knowledge graph.
+Open the canvas for a visual view. Or use Obsidian's graph view (Cmd+G) -- wikilinks between sessions, entities, and concepts render as a knowledge graph.
 
 ## 7. Periodic hygiene
 
 ```bash
 contextvault lint --scope workspace
-# →  orphan pages, dead links, missing frontmatter, empty sections,
-#    duplicate titles, broken markdown links, huge notes, unused tags,
-#    stale claims, semantic drift (if ollama installed)
+# ->  orphan pages, dead links, missing frontmatter, empty sections,
+#     duplicate titles, broken markdown links, huge notes, unused tags,
+#     stale claims, semantic drift (if ollama installed)
 ```
 
 ## Troubleshooting

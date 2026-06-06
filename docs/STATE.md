@@ -18,7 +18,8 @@ This is the "pick this up in a new session" doc. Read it first if you're returni
 - **10 lint checks** including stale-claim detection and semantic-drift (cosine) tiling.
 - **`contextvault export`** to zip a workspace for sharing/archival.
 - **Windows path-encoding** via `_strip_root()` helper handling drive letters.
-- **Hermes adapter** — `contextvault adapter add hermes` generates system prompt + launchd plist for HTTP server.
+- **Hermes adapter** — native MCP via `hermes mcp add contextvault --command contextvault --args serve`. HTTP fallback via `contextvault adapter add hermes`.
+- **Adapter cleanup** — removed `claude-desktop` and `continue-dev` from CLI (never implemented). Supported clients: `claude-code`, `cursor`, `hermes`.
 - **Pushed to GitHub**: https://github.com/singhdevhub-lovepreet/contextvault (8 commits on `main`).
 
 ---
@@ -131,7 +132,7 @@ src/contextvault/
 ├── lint/checks.py                                  ← 10 checks (incl. stale-claim + semantic-drift)
 ├── graph/{neighborhood,canvas}.py                  ← wikilinks + Obsidian canvas
 ├── server/{tools,mcp,http,auth}.py                 ← MCP stdio + HTTP loopback
-└── adapters/                                       ← claude-code installer, cursor snippet
+└── adapters/                                       ← claude-code, cursor, hermes adapters
     └── claude_code/hooks.json                      ← THE hooks template (v2, fixed)
 
 tests/                                              ← 333+ cases, hermetic

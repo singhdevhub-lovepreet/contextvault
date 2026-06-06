@@ -104,12 +104,13 @@ def install_cursor() -> list[str]:
 
 
 def install_hermes(*, plist_path: Path | None = None) -> list[str]:
-    """Generate Hermes system prompt + launchd plist for HTTP server.
+    """Generate Hermes HTTP fallback setup: launchd plist + system-prompt template.
 
-    Hermes doesn't support MCP — it uses the HTTP loopback endpoint.
-    This adapter creates:
-      1. A launchd plist to keep the HTTP server running (optional, user activates)
-      2. The system prompt template to paste into Hermes Chat settings
+    The recommended Hermes integration is via native MCP (``hermes mcp add
+    contextvault --command contextvault --args serve``).  This adapter provides
+    an HTTP fallback for environments where MCP isn't available: a launchd
+    plist to keep the HTTP server running, and a system-prompt template with
+    the HTTP tool descriptions.
     """
     plist_path = plist_path or Path("~/Library/LaunchAgents/contextvault.plist").expanduser()
     token_path = Path("~/.config/contextvault/token").expanduser()

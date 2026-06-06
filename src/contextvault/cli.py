@@ -81,7 +81,7 @@ def _add_workspaces(sub: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 def _add_adapter(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("adapter", help="install or remove a client adapter")
     asub = p.add_subparsers(dest="adapter_cmd", required=True)
-    clients = ["claude-code", "cursor", "claude-desktop", "continue-dev", "hermes"]
+    clients = ["claude-code", "cursor", "hermes"]
     for op in ("add", "remove"):
         ap = asub.add_parser(op, help=f"{op} an adapter")
         ap.add_argument("client", choices=clients)
