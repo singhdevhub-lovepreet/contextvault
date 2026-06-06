@@ -8,6 +8,7 @@ Get from zero to "my next session is captured into Obsidian" in five minutes.
 git clone git@github.com:singhdevhub-lovepreet/contextvault.git
 cd contextvault
 python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e ".[dev]"
 ```
 

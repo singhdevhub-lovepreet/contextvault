@@ -22,6 +22,7 @@ ContextVault captures your coding sessions into structured Markdown notes, files
 git clone git@github.com:singhdevhub-lovepreet/contextvault.git
 cd contextvault
 python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e ".[dev]"
 ```
 
