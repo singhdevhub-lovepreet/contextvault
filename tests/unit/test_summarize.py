@@ -69,6 +69,44 @@ class TestSummarize:
         assert s.is_empty
 
 
+class TestBacktickInDecisions:
+    """Regression tests for backtick handling in decision extraction."""
+
+    def test_dangling_backtick_stripped(self) -> None:
+        from contextvault.capture.claude_code import UserMessage
+        records = [
+            UserMessage(
+                uuid="1", timestamp="2026-06-02T10:00:00Z", text="I'll use a `debug approach"
+            )
+        ]
+        s = summarize(records)
+        assert s.decisions == ["use a debug approach"]
+
+    def test_dangling_tilde_path_backtick_stripped(self) -> None:
+        from contextvault.capture.claude_code import UserMessage
+        records = [
+            UserMessage(
+                uuid="1",
+                timestamp="2026-06-02T10:00:00Z",
+                text="We'll debug before touching `~/some/path",
+            )
+        ]
+        s = summarize(records)
+        assert s.decisions == ["debug before touching ~/some/path"]
+
+    def test_backticks_in_middle_stripped(self) -> None:
+        from contextvault.capture.claude_code import UserMessage
+        records = [
+            UserMessage(
+                uuid="1",
+                timestamp="2026-06-02T10:00:00Z",
+                text="Let's use a `command` here and then continue",
+            )
+        ]
+        s = summarize(records)
+        assert s.decisions == ["use a command here and then continue"]
+
+
 class TestReadonlyBashFilter:
     def test_filters_common_readonly(self) -> None:
         from contextvault.capture.claude_code import ToolUse

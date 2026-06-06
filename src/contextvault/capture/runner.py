@@ -16,6 +16,7 @@ Pure-data extraction lives in :mod:`.summarize`, transcript parsing in
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ from contextvault.capture.claude_code import (
 )
 from contextvault.capture.redact import RedactionEvent, redact_text
 from contextvault.capture.summarize import SessionSummary, summarize
+from contextvault.retrieve.persist import update_index
 from contextvault.vault import Vault
 from contextvault.workspace import encode
 
@@ -120,6 +122,10 @@ def run_capture(
             _append_redacted_log(vault, meta.session_id, redactions)
         _save_checkpoint(vault, checkpoint, meta.session_id, meta.last_uuid)
         _regenerate_canvas(vault, workspace)
+
+    # Update persistent BM25 index
+    with contextlib.suppress(Exception):
+        update_index(vault, note_rel, note_body, workspace=workspace)
 
     return CaptureResult(
         workspace=workspace,

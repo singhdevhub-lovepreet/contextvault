@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from contextvault.retrieve.bm25 import BM25Index
+from contextvault.retrieve.persist import load_or_build
 from contextvault.vault import Vault, VaultError
 
 __all__ = ["RecallHit", "build_index", "extract_workspace_from_path", "run_recall"]
@@ -86,7 +87,7 @@ def run_recall(
         raise VaultError(f"vault does not exist: {vault_path!s}")
 
     vault = Vault(vault_path)
-    idx = build_index(vault)
+    idx, _ = load_or_build(vault)
     hits = idx.query(query, top_k=top_k, scope=scope)
 
     out: list[RecallHit] = []

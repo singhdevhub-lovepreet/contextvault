@@ -206,7 +206,7 @@ def _is_readonly_bash(cmd: str) -> bool:
 def _harvest_decisions(text: str, into: list[str]) -> None:
     for pattern in _DECISION_PATTERNS:
         for match in pattern.finditer(text):
-            decision = match.group(1).strip()
+            decision = match.group(1).strip().replace("`", "")
             if 6 <= len(decision) <= 200 and decision not in into:
                 into.append(decision)
 

@@ -1,6 +1,6 @@
 # ContextVault — project state & handoff
 
-_Last updated: 2026-06-02 (end of Phase 6 ship)_
+_Last updated: 2026-06-06 (end of v0.2 fixes)_
 
 This is the "pick this up in a new session" doc. Read it first if you're returning to the project after a gap, handing it off, or briefing another AI on what's done and what's next.
 
@@ -8,10 +8,12 @@ This is the "pick this up in a new session" doc. Read it first if you're returni
 
 ## TL;DR
 
-- **Version**: `0.1.0-alpha`, 7 phases shipped, **285 tests** green, ruff + mypy strict clean across **26 source files**.
+- **Version**: `0.1.0-alpha`, 7 phases shipped + v0.2 fixes, **288 tests** green, ruff + mypy strict clean across **28 source files**.
 - **Working end-to-end**: init → manual capture → recall (CLI, HTTP, MCP) → vault visible in Obsidian.
 - **Auto-capture hooks work** with the v2 hooks.json (uses `$CLAUDE_PROJECT_DIR`, no `UserPromptSubmit` matcher). The first version (`$PWD` + `^/clear` matcher) was buggy and is fixed.
-- **No remote pushed.** Local-only repo at `/Users/lsingh/Desktop/experiments/contextvault/`. Seven commits on `main`.
+- **Sweeper daemon** captures sessions killed before Stop hook fires (launchd, runs every 2min).
+- **Persistent BM25 index** at `.vault-meta/bm25/index.json`, updated incrementally on capture.
+- **No remote pushed.** Local-only repo at `/Users/lovepreetsingh/Desktop/contextvault/`. Seven commits on `main`.
 
 ---
 

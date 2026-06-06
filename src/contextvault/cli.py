@@ -40,6 +40,16 @@ def _add_capture(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> No
     p.add_argument("--allow-redacted", action="store_true", help="proceed past redaction matches")
 
 
+def _add_sweep(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser("sweep", help="capture sessions killed before Stop hook fired")
+    p.add_argument(
+        "--stable-seconds",
+        type=int,
+        default=90,
+        help="minimum seconds since last transcript write before capturing (default: 90)",
+    )
+
+
 def _add_recall(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sub.add_parser("recall", help="search the vault and return top-k hits")
     p.add_argument("query", help="search query")
@@ -100,6 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_init(sub)
     _add_serve(sub)
     _add_capture(sub)
+    _add_sweep(sub)
     _add_recall(sub)
     _add_lint(sub)
     _add_hot(sub)
@@ -131,6 +142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "hot": _run_hot,
         "ingest": _run_ingest,
         "save": _run_save,
+        "sweep": _run_sweep,
     }
     handler = dispatch.get(args.command)
     if handler is not None:
@@ -480,6 +492,32 @@ def _run_save(args: argparse.Namespace) -> int:
         return 2
 
     sys.stdout.write(f"saved → {result['path']}\n")
+    return 0
+
+
+def _run_sweep(args: argparse.Namespace) -> int:
+    from contextvault import config
+    from contextvault.capture.sweeper import run_sweep
+    from contextvault.vault import VaultError
+
+    vault_path = config.resolve_vault_path(None)
+    if not vault_path.is_dir():
+        sys.stderr.write(
+            f"contextvault sweep: vault does not exist: {vault_path!s}\n"
+            f"  Run `contextvault init` first.\n"
+        )
+        return 3
+
+    try:
+        captured = run_sweep(vault_path, stable_seconds=args.stable_seconds)
+    except VaultError as exc:
+        sys.stderr.write(f"contextvault sweep: {exc}\n")
+        return 3
+
+    if captured:
+        sys.stdout.write(f"captured {len(captured)} session(s): {', '.join(s[:8] for s in captured)}\n")
+    else:
+        sys.stdout.write("no new sessions to capture\n")
     return 0
 
 
