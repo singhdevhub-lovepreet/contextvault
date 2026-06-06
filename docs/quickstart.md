@@ -4,13 +4,17 @@ Get from zero to "my next session is captured into Obsidian" in five minutes.
 
 ## 1. Install
 
+**Requires Python 3.11+** ([download](https://www.python.org/downloads/) or `brew install python@3.12`).
+
 ```bash
 git clone git@github.com:singhdevhub-lovepreet/contextvault.git
 cd contextvault
-python3 -m venv .venv
+python3.12 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -e ".[dev]"
 ```
+
+> If `python3.12` isn't found, check `python3 --version`. Any 3.11+ works -- just replace `python3.12` above with your binary name.
 
 Put `contextvault` on your PATH:
 
